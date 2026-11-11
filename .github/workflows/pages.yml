@@ -32,8 +32,8 @@ jobs:
           trunk --version
       - name: Privacy check
         run: sh tools/privacy_check.sh
-      - name: Core tests
-        run: cargo test -p cf_core --release
+      - name: Tests (core + web math)
+        run: cargo test --release
       - name: Build
         run: trunk build --release
       - uses: actions/configure-pages@v5
