@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'">
+<title>cam-fov — robot camera FOV &amp; stereo depth planner</title>
+<link data-trunk rel="rust" href="crates/cf_web/Cargo.toml" data-bin="cf_web" data-wasm-opt="0">
+<link data-trunk rel="copy-file" href="web/boot.js">
+<style>
+:root { --bg:#fafafa; --fg:#1d1d1f; --muted:#666; --card:#fff; --line:#d6d6d6; --accent:#1a73e8;
+  --grid:#c8c8c8; --frustum:#1a73e8; --floor:#2e9d57; --target:#e08a00; --cam2:#b03ab0; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#151515; --fg:#e8e8e8; --muted:#9a9a9a; --card:#202020; --line:#3a3a3a; --accent:#7ab0ff;
+    --grid:#444; --frustum:#7ab0ff; --floor:#5fd38a; --target:#ffb84d; --cam2:#e07ae0; }
+}
+* { box-sizing:border-box; }
+body { margin:0; font:15px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 16px;
+  border-bottom:1px solid var(--line); }
+header h1 { font-size:1.1rem; margin:0; }
+header p { margin:2px 0 0; color:var(--muted); font-size:.85rem; }
+main { display:grid; grid-template-columns:minmax(280px, 380px) 1fr; gap:12px; padding:12px 16px; }
+@media (max-width: 760px) { main { grid-template-columns:1fr; } }
+section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:12px; }
+h2 { font-size:.95rem; margin:0 0 8px; }
+label { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:4px 0; font-size:.9rem; }
+input[type=number], select { width:7.5em; padding:3px 4px; font:inherit; background:var(--bg); color:var(--fg);
+  border:1px solid var(--line); border-radius:4px; }
+select#preset { width:100%; }
+label.check { justify-content:flex-start; }
+button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--fg); cursor:pointer; }
+.out { font-family:ui-monospace, monospace; font-size:.85rem; white-space:pre-wrap; margin:6px 0 0; }
+canvas { width:100%; display:block; border:1px solid var(--line); border-radius:6px; background:var(--card); }
+#view3d { height:min(60vh, 460px); touch-action:none; cursor:grab; }
+#plot { height:220px; }
+.row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+.row input[type=range] { flex:1; }
+.hint, footer { color:var(--muted); font-size:.8rem; }
+footer { padding:0 16px 16px; }
+[hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 data-en="cam-fov — robot camera FOV &amp; stereo depth planner" data-ko="cam-fov — 로봇 카메라 FOV · 스테레오 깊이 플래너">cam-fov</h1>
+    <p data-en="Ideal pinhole model. Estimates only — verify with a calibration." data-ko="이상적인 핀홀 모델입니다. 추정치일 뿐이니 캘리브레이션으로 확인하세요.">.</p>
+  </div>
+  <button id="lang" type="button">한국어</button>
+</header>
+<main>
+<div>
+  <section>
+    <h2 data-en="Camera (pinhole)" data-ko="카메라 (핀홀)">Camera</h2>
+    <label><span data-en="Preset" data-ko="프리셋">Preset</span></label>
+    <select id="preset">
+      <option value="" data-en="— custom —" data-ko="— 직접 입력 —">—</option>
+      <option value="wide" data-en="wide robot head camera (typical)" data-ko="광각 로봇 헤드 카메라 (일반값)">wide</option>
+      <option value="narrow" data-en="narrow gripper camera (typical)" data-ko="협각 그리퍼 카메라 (일반값)">narrow</option>
+    </select>
+    <label><span data-en="Sensor given as" data-ko="센서 입력 방식">Sensor</span>
+      <select id="mode">
+        <option value="pitch" data-en="pixel pitch" data-ko="픽셀 피치">pitch</option>
+        <option value="size" data-en="sensor size" data-ko="센서 크기">size</option>
+      </select></label>
+    <div id="g_pitch"><label><span data-en="Pixel pitch (µm)" data-ko="픽셀 피치 (µm)">pitch</span><input id="pitch" type="number" step="0.01" min="0.1"></label></div>
+    <div id="g_size">
+      <label><span data-en="Sensor width (mm)" data-ko="센서 가로 (mm)">w</span><input id="sw" type="number" step="0.01" min="0.1"></label>
+      <label><span data-en="Sensor height (mm)" data-ko="센서 세로 (mm)">h</span><input id="sh" type="number" step="0.01" min="0.1"></label>
+    </div>
+    <label><span data-en="Resolution W (px)" data-ko="해상도 W (px)">W</span><input id="rw" type="number" step="1" min="1"></label>
+    <label><span data-en="Resolution H (px)" data-ko="해상도 H (px)">H</span><input id="rh" type="number" step="1" min="1"></label>
+    <label><span data-en="Focal length (mm)" data-ko="초점거리 (mm)">f</span><input id="f" type="number" step="0.01" min="0.1"></label>
+    <div id="o_cam" class="out"></div>
+  </section>
+  <section>
+    <h2 data-en="Mount + target" data-ko="장착 + 대상">Mount</h2>
+    <label><span data-en="Camera height above floor (m)" data-ko="바닥에서 카메라 높이 (m)">h</span><input id="h" type="number" step="0.01" min="0"></label>
+    <label><span data-en="Downward tilt (deg, 0 = horizontal)" data-ko="아래쪽 틸트 (°, 0 = 수평)">tilt</span><input id="tilt" type="number" step="1" min="-89" max="90"></label>
+    <label><span data-en="Target distance along axis (m)" data-ko="광축 방향 대상 거리 (m)">z</span><input id="z" type="number" step="0.01" min="0.01"></label>
+    <label><span data-en="Target object size (mm)" data-ko="대상 물체 크기 (mm)">size</span><input id="obj" type="number" step="1" min="0.1"></label>
+    <label><span data-en="Minimum pixels on object" data-ko="물체 최소 픽셀 수">min px</span><input id="minpx" type="number" step="1" min="1"></label>
+    <div id="o_mount" class="out"></div>
+  </section>
+  <section>
+    <h2 data-en="Stereo (extra)" data-ko="스테레오 (추가)">Stereo</h2>
+    <label class="check"><input id="stereo" type="checkbox"><span data-en="stereo pair" data-ko="스테레오 쌍">stereo</span></label>
+    <div id="g_stereo">
+      <label><span data-en="Baseline B (mm)" data-ko="베이스라인 B (mm)">B</span><input id="base" type="number" step="1" min="1"></label>
+      <label><span data-en="Disparity matching accuracy (px)" data-ko="시차 매칭 정확도 (px)">Δd</span><input id="dd" type="number" step="0.05" min="0.01"></label>
+      <label><span data-en="Disparity search range (max disparity, px)" data-ko="시차 탐색 범위 (최대 시차, px)">dmax</span><input id="dmax" type="number" step="1" min="1"></label>
+      <div id="o_stereo" class="out"></div>
+    </div>
+  </section>
+</div>
+<div>
+  <section>
+    <h2 data-en="3D view" data-ko="3D 보기">3D</h2>
+    <canvas id="view3d"></canvas>
+    <div class="row"><span data-en="Distance" data-ko="거리">z</span><input id="zs" type="range" min="0.05" max="10" step="0.01"><span id="zs_val" class="out"></span></div>
+    <p class="hint" data-en="Drag to orbit. Grid: 0.5 m. Blue: frustum, orange: target plane + object, green: floor footprint." data-ko="드래그로 회전. 격자: 0.5 m. 파랑: 시야 절두체, 주황: 대상 평면 + 물체, 초록: 바닥 영역.">.</p>
+  </section>
+  <section id="s_plot">
+    <h2 data-en="Stereo depth resolution Δz vs distance" data-ko="거리별 스테레오 깊이 분해능 Δz">Δz</h2>
+    <canvas id="plot"></canvas>
+  </section>
+</div>
+</main>
+<footer data-en="MIT license · cam-fov contributors · runs entirely in your browser, no network requests." data-ko="MIT 라이선스 · cam-fov contributors · 브라우저에서만 동작하며 네트워크 요청이 없습니다.">MIT</footer>
+</body>
+</html>
