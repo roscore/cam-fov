@@ -154,14 +154,23 @@ pub fn corner_dirs(cam: &Camera, tilt_deg: f64) -> [V3; 4] {
     [(-tx, ty), (tx, ty), (tx, -ty), (-tx, -ty)].map(|(x, y)| tilt_dir(V3::new(x, y, 1.0), tilt_deg))
 }
 
-/// Where a ray from `origin` along `dir` meets the floor (y = 0), capped at horizontal range
-/// `max_range` (so rays at/above the horizon still give a drawable far edge).
-pub fn floor_hit(origin: V3, dir: V3, max_range: f64) -> V3 {
-    let horiz = dir.x.hypot(dir.z).max(EPS);
-    let t_cap = max_range / horiz;
-    let t = if dir.y < -EPS { (-origin.y / dir.y).min(t_cap) } else { t_cap };
-    let p = origin.add(dir.scale(t));
-    V3::new(p.x, p.y.max(0.0), p.z)
+/// Floor footprint of the frustum (TL, TR, BR, BL; y = 0), far edge capped at forward distance
+/// `max_z`. A top corner whose ray misses the floor (or lands beyond the cap) is replaced by the
+/// point at `max_z` on the line where that side plane of the frustum meets the floor.
+/// Assumes the bottom rays hit the floor (i.e. `floor_view` returned `Some`).
+pub fn floor_footprint(origin: V3, dirs: &[V3; 4], max_z: f64) -> [V3; 4] {
+    let hit = |d: V3| origin.add(d.scale(-origin.y / d.y));
+    let top = |t: V3, b: V3| {
+        if t.y < -EPS && hit(t).z <= max_z {
+            return hit(t);
+        }
+        // Side plane through origin spanned by b and t: n · (P - origin) = 0, with P = (x, 0, max_z).
+        let n = V3::new(b.y * t.z - b.z * t.y, b.z * t.x - b.x * t.z, b.x * t.y - b.y * t.x);
+        let x = origin.x + (n.y * origin.y - n.z * (max_z - origin.z)) / n.x;
+        V3::new(x, 0.0, max_z)
+    };
+    let (br, bl) = (hit(dirs[2]), hit(dirs[3]));
+    [top(dirs[0], dirs[3]), top(dirs[1], dirs[2]), br, bl]
 }
 
 #[cfg(test)]
@@ -225,15 +234,18 @@ mod tests {
     }
 
     #[test]
-    fn frustum_floor_hits_agree_with_floor_view() {
+    fn frustum_floor_footprint() {
         let cam = Camera { sensor_w_mm: 4.0, sensor_h_mm: 3.0, res_w: 640.0, res_h: 480.0, focal_mm: 4.0 };
         let origin = V3::new(0.0, 1.0, 0.0);
-        let d = corner_dirs(&cam, 45.0);
         let v = floor_view(1.0, 45.0, cam.vfov_deg()).unwrap();
-        let bl = floor_hit(origin, d[3], 100.0);
-        let tl = floor_hit(origin, d[0], 100.0);
-        close(bl.y, 0.0, 1e-9);
-        close(bl.z, v.near, 1e-9);
-        close(tl.z, v.far, 1e-9);
+        let f = floor_footprint(origin, &corner_dirs(&cam, 45.0), 100.0);
+        close(f[3].z, v.near, 1e-9);
+        close(f[0].z, v.far, 1e-9);
+        // Horizontal camera: top rays miss the floor, so the far edge sits on the floor at the cap,
+        // on the side plane x = z·tan(HFOV/2) (vertical when untilted).
+        let f = floor_footprint(origin, &corner_dirs(&cam, 0.0), 5.0);
+        close(f[1].y, 0.0, 1e-12);
+        close(f[1].z, 5.0, 1e-12);
+        close(f[1].x, 5.0 * 0.5, 1e-9);
     }
 }

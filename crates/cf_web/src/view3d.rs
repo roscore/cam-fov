@@ -1,6 +1,6 @@
 //! Tiny orbit-camera perspective renderer on a 2D canvas (no WebGL).
 use crate::css_var;
-use cf_core::{corner_dirs, floor_hit, floor_view, tilt_dir, Camera, V3};
+use cf_core::{corner_dirs, floor_footprint, floor_view, tilt_dir, Camera, V3};
 use web_sys::CanvasRenderingContext2d as Ctx;
 
 pub struct Scene {
@@ -83,8 +83,10 @@ pub fn draw(ctx: &Ctx, w: f64, h: f64, sc: &Scene, yaw: f64, pitch: f64) {
     let dirs = corner_dirs(&sc.cam, sc.tilt);
     let rect: Vec<V3> = dirs.iter().map(|d| o.add(d.scale(sc.z))).collect();
     let fv = floor_view(sc.h, sc.tilt, sc.cam.vfov_deg());
-    let range = (3.0 * sc.z).max(1.0);
-    let foot: Vec<V3> = if fv.is_some() { dirs.iter().map(|d| floor_hit(o, *d, range)).collect() } else { vec![] };
+    let foot: Vec<V3> = match fv {
+        Some(v) => floor_footprint(o, &dirs, (3.0 * sc.z).max(2.0 * v.near).max(1.0)).to_vec(),
+        None => vec![],
+    };
     let b = sc.baseline_mm.unwrap_or(0.0) / 1000.0;
     let o2 = V3::new(b, sc.h, 0.0);
 

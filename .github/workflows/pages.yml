@@ -15,6 +15,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v4
       - name: Rust stable + wasm32 target
@@ -24,7 +27,8 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - name: Install trunk 0.22.1
         run: |
-          curl -sSL https://github.com/trunk-rs/trunk/releases/download/v0.22.1/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin trunk
+          mkdir -p "$HOME/.cargo/bin"
+          curl -fsSL https://github.com/trunk-rs/trunk/releases/download/v0.22.1/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz -C "$HOME/.cargo/bin" trunk
           trunk --version
       - name: Privacy check
         run: sh tools/privacy_check.sh
