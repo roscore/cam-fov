@@ -32,7 +32,18 @@ label.check { justify-content:flex-start; }
 button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--fg); cursor:pointer; }
 .out { font-family:ui-monospace, monospace; font-size:.85rem; white-space:pre-wrap; margin:6px 0 0; }
 canvas { width:100%; display:block; border:1px solid var(--line); border-radius:6px; background:var(--card); }
-#view3d { height:min(60vh, 460px); touch-action:none; cursor:grab; }
+#view3d { height:min(60vh, 460px); touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; }
+#stage { position:relative; }
+#bar { position:absolute; top:6px; left:6px; right:6px; display:flex; flex-wrap:wrap; gap:4px; pointer-events:none; }
+#bar button { pointer-events:auto; font-size:.75rem; padding:2px 7px; background:rgba(20,22,28,.65); color:#ddd; border-color:rgba(255,255,255,.2); }
+#bar button.on { background:rgba(80,150,255,.85); color:#fff; }
+#bar .sep { width:8px; }
+#hud, #legend, #tlabel { position:absolute; pointer-events:none; color:#eee; background:rgba(15,17,22,.7); border-radius:4px; font-size:.75rem; }
+#hud { left:6px; bottom:6px; margin:0; padding:4px 7px; }
+#legend { right:6px; bottom:6px; padding:3px 7px; display:flex; align-items:center; gap:6px; font-family:ui-monospace, monospace; }
+#legend .grad { display:inline-block; width:70px; height:8px; border-radius:2px; background:linear-gradient(90deg, #33d959, #ffd933, #f24033); }
+#tlabel { transform:translate(-50%, -130%); padding:1px 5px; font-family:ui-monospace, monospace; white-space:nowrap; }
+#nogl { margin:4px 0 0; color:var(--muted); font-size:.8rem; }
 #plot { height:220px; }
 .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
 .row input[type=range] { flex:1; }
@@ -97,9 +108,26 @@ footer { padding:0 16px 16px; }
 <div>
   <section>
     <h2 data-en="3D view" data-ko="3D 보기">3D</h2>
-    <canvas id="view3d"></canvas>
+    <div id="stage">
+      <canvas id="view3d"></canvas>
+      <div id="bar">
+        <button id="v_persp" type="button" class="on" data-en="Perspective" data-ko="원근">P</button>
+        <button id="v_top" type="button" data-en="Top" data-ko="위">T</button>
+        <button id="v_side" type="button" data-en="Side" data-ko="옆">S</button>
+        <button id="v_fpv" type="button" data-en="From camera" data-ko="카메라 시점">C</button>
+        <span class="sep"></span>
+        <button id="t_frustum" type="button" class="on" data-en="Frustum" data-ko="절두체">F</button>
+        <button id="t_foot" type="button" class="on" data-en="Footprint" data-ko="바닥 영역">G</button>
+        <button id="t_rings" type="button" class="on" data-en="Δz rings" data-ko="Δz 링">R</button>
+        <button id="t_shadow" type="button" class="on" data-en="Shadows" data-ko="그림자">S</button>
+      </div>
+      <div id="hud" class="out"></div>
+      <div id="tlabel"></div>
+      <div id="legend" hidden>Δz/z <span class="grad"></span> 0.5 % … 5 %</div>
+      <p id="nogl" hidden data-en="WebGL2 is not available — showing the simple 2D view." data-ko="WebGL2를 사용할 수 없어 간단한 2D 보기를 표시합니다.">WebGL2</p>
+    </div>
     <div class="row"><span data-en="Distance" data-ko="거리">z</span><input id="zs" type="range" min="0.05" max="10" step="0.01"><span id="zs_val" class="out"></span></div>
-    <p class="hint" data-en="Drag to orbit. Grid: 0.5 m. Blue: frustum, orange: target plane + object, green: floor footprint." data-ko="드래그로 회전. 격자: 0.5 m. 파랑: 시야 절두체, 주황: 대상 평면 + 물체, 초록: 바닥 영역.">.</p>
+    <p class="hint" data-en="Left drag: orbit · right drag / two fingers: pan · wheel / pinch: zoom · double click: reset. Drag the orange target to change the distance, the orange knob on the mast for height, the blue ring for tilt. Green: floor footprint, red: blind zone, checker: 0.5 m." data-ko="왼쪽 드래그: 회전 · 오른쪽 드래그 / 두 손가락: 이동 · 휠 / 핀치: 확대 · 더블 클릭: 초기화. 주황 대상을 끌면 거리, 기둥의 주황 손잡이는 높이, 파란 링은 틸트가 바뀝니다. 초록: 바닥 영역, 빨강: 사각지대, 체크 무늬: 0.5 m.">.</p>
   </section>
   <section id="s_plot">
     <h2 data-en="Stereo depth resolution Δz vs distance" data-ko="거리별 스테레오 깊이 분해능 Δz">Δz</h2>

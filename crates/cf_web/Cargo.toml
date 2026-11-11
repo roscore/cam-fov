@@ -14,5 +14,7 @@ features = [
   "Window", "Document", "Element", "HtmlElement", "HtmlInputElement", "HtmlSelectElement",
   "HtmlCanvasElement", "CanvasRenderingContext2d", "Event", "EventTarget", "PointerEvent",
   "MouseEvent", "Navigator", "NodeList", "DomRect", "CssStyleDeclaration", "Storage",
-  "DomTokenList", "ResizeObserver",
+  "DomTokenList", "ResizeObserver", "AddEventListenerOptions", "WheelEvent", "MediaQueryList", "console",
+  "WebGl2RenderingContext", "WebGlProgram", "WebGlShader", "WebGlBuffer", "WebGlVertexArrayObject",
+  "WebGlUniformLocation", "WebGlContextAttributes",
 ]

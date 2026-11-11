@@ -1,4 +1,7 @@
 //! Browser UI: reads the form, calls `cf_core`, writes text outputs and draws two canvases.
+mod gl;
+mod math;
+mod view2d;
 mod view3d;
 
 use cf_core::{depth_resolution_mm, floor_view, min_depth_m, Camera};
@@ -16,6 +19,25 @@ struct Ui {
 
 thread_local! {
     static UI: RefCell<Ui> = const { RefCell::new(Ui { ko: false, yaw: -0.7, pitch: 0.45, drag: None }) };
+}
+
+/// Current inputs for the 3D view (validated by `update`).
+#[derive(Clone, Copy)]
+pub struct Scene {
+    pub cam: Camera,
+    pub h: f64,
+    pub tilt: f64,
+    pub z: f64,
+    pub obj_mm: f64,
+    pub minpx: f64,
+    /// Stereo (baseline mm, Δd px, d_max px) when enabled and valid.
+    pub stereo: Option<(f64, f64, f64)>,
+}
+
+impl Scene {
+    pub fn baseline_mm(&self) -> Option<f64> {
+        self.stereo.map(|s| s.0)
+    }
 }
 
 const INPUTS: &[&str] = &["mode", "pitch", "sw", "sh", "rw", "rh", "f", "h", "tilt", "z", "obj", "minpx", "stereo", "base", "dd", "dmax"];
@@ -193,10 +215,12 @@ fn update() {
             None => set_text("o_stereo", bad),
         }
     }
-    let (yaw, pitch) = UI.with(|u| (u.borrow().yaw, u.borrow().pitch));
-    let scene = view3d::Scene { cam, h, tilt, z, obj_mm: obj, baseline_mm: st.map(|s| s.0) };
-    let (ctx, w, hh) = prepare("view3d");
-    view3d::draw(&ctx, w, hh, &scene, yaw, pitch);
+    let scene = Scene { cam, h, tilt, z, obj_mm: obj, minpx, stereo: st };
+    if !view3d::set_scene(scene) {
+        let (yaw, pitch) = UI.with(|u| (u.borrow().yaw, u.borrow().pitch));
+        let (ctx, w, hh) = prepare("view3d");
+        view2d::draw(&ctx, w, hh, &scene, yaw, pitch);
+    }
     if let Some((b, dd, dmax)) = st {
         draw_plot(k.fx, b, dd, min_depth_m(k.fx, b, dmax), z);
     }
@@ -310,7 +334,15 @@ pub fn start() {
     let c = Closure::<dyn FnMut()>::new(update);
     web_sys::window().unwrap().add_event_listener_with_callback("resize", c.as_ref().unchecked_ref()).unwrap();
     c.forget();
-    setup_orbit();
+    // ponytail: if WebGL2 exists but shaders fail, the canvas is already taken and the 2D fallback
+    // cannot draw; swap in a fresh canvas element if that ever shows up in practice.
+    if !view3d::init() {
+        show("nogl", true);
+        for id in ["bar", "hud", "tlabel"] {
+            show(id, false);
+        }
+        setup_orbit();
+    }
     apply_lang();
 }
 
